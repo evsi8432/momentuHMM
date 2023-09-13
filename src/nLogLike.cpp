@@ -9,8 +9,8 @@
 //' @param covs Covariates,
 //' @param data A \code{\link{momentuHMMData}} object of the observations,
 //' @param dataNames Character vector containing the names of the data streams,
-//' @param dist Named list indicating the probability distributions of the data streams. 
-//' @param Par Named list containing the state-dependent parameters of the data streams, matrix of regression coefficients 
+//' @param dist Named list indicating the probability distributions of the data streams.
+//' @param Par Named list containing the state-dependent parameters of the data streams, matrix of regression coefficients
 //' for the transition probabilities ('beta'), and initial distribution ('delta').
 //' @param aInd Vector of indices of the rows at which the data switches to another animal
 //' @param zeroInflation Named list of logicals indicating whether the probability distributions of the data streams are zero-inflated.
@@ -23,13 +23,14 @@
 //' the state is not known.
 //' @param betaRef Indices of reference elements for t.p.m. multinomial logit link.
 //' @param mixtures Number of mixtures for the state transition probabilities
-//' 
+//'
 //' @return Negative log-likelihood
 // [[Rcpp::export]]
 double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVector dataNames, List dist,
                      List Par,
                      IntegerVector aInd, List zeroInflation, List oneInflation,
-                     bool stationary, IntegerVector knownStates, IntegerVector betaRef, int mixtures)
+                     bool stationary,
+                     IntegerVector knownStates, double lambda, IntegerVector betaRef, int mixtures)
 {
   int nbObs = data.nrows();
 
@@ -47,7 +48,7 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
   rowSums.zeros();
 
   arma::mat g(nbObs,nbStates*(nbStates-1));
-  
+
   arma::mat betaMix = Par["beta"];
   //arma::mat delta = Par["delta"];
   NumericVector genData;
@@ -56,17 +57,17 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
   std::string genDist;
   std::string genname;
   int nbCovs = 0;
-  
+
   if(nbStates>1) {
-    
+
     nbCovs = betaMix.n_rows * betaMix.n_cols / (mixtures * nbStates * (nbStates-1)) - 1;
     arma::mat beta(nbCovs+1,nbStates*(nbStates-1));
-    
-    for(int mix=0; mix<mixtures; mix++){    
-      
+
+    for(int mix=0; mix<mixtures; mix++){
+
       beta = betaMix.rows(mix*(nbCovs+1)+0,mix*(nbCovs+1)+nbCovs);
       g = covs*beta;
-  
+
       for(int k=0;k<nbObs;k++) {
         int cpt=0; // counter for diagonal elements
         for(int i=0;i<nbStates;i++) {
@@ -78,37 +79,37 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
             }
             else
               trMat[mix](i,j,k) = exp(g(k,i*nbStates+j-cpt));
-  
+
             // keep track of row sums, to normalize in the end
             rowSums(i,k)=rowSums(i,k)+trMat[mix](i,j,k);
           }
         }
       }
-  
+
       // normalization
       for(int k=0;k<nbObs;k++)
         for(int i=0;i<nbStates;i++)
           for(int j=0;j<nbStates;j++)
             trMat[mix](i,j,k) = trMat[mix](i,j,k)/rowSums(i,k);
-      
+
       rowSums.zeros();
     }
   }
-  
+
   //=======================================================//
-  // 1. Computation of initial distribution(s)             //
+  // 2. Computation of initial distribution(s)             //
   //=======================================================//
   unsigned int nbAnimals = (unsigned int) aInd.size();
   std::vector<arma::mat> delta(mixtures);
   for(int mix=0; mix<mixtures; mix++)
     delta[mix] = arma::mat(nbAnimals,nbStates);
-  
+
   if(nbStates==1){
     for(int mix=0; mix<mixtures; mix++)
       delta[mix].ones(); // no distribution if only one state
   } else if(stationary) {
     // compute stationary distribution delta
-  
+
     arma::mat diag(nbStates,nbStates);
     diag.eye(); // diagonal of ones
     arma::mat Gamma(nbStates,nbStates); // all slices are identical if stationary
@@ -153,7 +154,7 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
   }
 
   //==========================================================//
-  // 2. Computation of matrix of joint probabilities allProbs //
+  // 3. Computation of matrix of joint probabilities allProbs //
   //==========================================================//
 
   // map the functions names with the actual functions
@@ -196,12 +197,12 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
   arma::uvec noOnes;
   arma::uvec nbOnes;
   arma::uvec noZerosOnes;
-  
+
   double NAvalue = -99999999999; // value designating NAs in data
   int zeroInd = 0;
   int oneInd = 0;
   bool mvn = false;
-  
+
   unsigned int nDists = (unsigned int) dist.size();
 
   for(unsigned int k=0;k<nDists;k++){
@@ -223,17 +224,17 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
     genPar = as<arma::mat>(Par[genname]);
     genzeroInflation = as<bool>(zeroInflation[genname]);
     genoneInflation = as<bool>(oneInflation[genname]);
-    
-    if(genoneInflation) 
+
+    if(genoneInflation)
       oneInd = nbStates;
-    else 
+    else
       oneInd = 0;
-    
-    if(genzeroInflation) 
+
+    if(genzeroInflation)
       zeroInd = nbStates;
-    else 
+    else
       zeroInd = 0;
-    
+
     // remove the NAs from step (impossible to subset a vector with NAs)
     NumericVector tmpL;
     for(int l=0; l<L.size(); l++){
@@ -248,33 +249,33 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
     }
     arma::uvec noNAs = arma::find(as<arma::vec>(tmpL)!=NAvalue);
     genData = combine(L);
-    
+
     // extract zero-mass and one-mass parameters if necessary
     if(genzeroInflation || genoneInflation) {
-      
+
       if(genzeroInflation){
         zeromass = genPar.rows(genPar.n_rows-oneInd-nbStates,genPar.n_rows-oneInd-1);   //genPar(arma::span(genPar.n_rows-1),arma::span(),arma::span());
-        
+
         noZeros = arma::find(as<arma::vec>(genData)>0);
         nbZeros = arma::find(as<arma::vec>(genData)==0);
       }
-      
+
       if(genoneInflation){
         onemass = genPar.rows(genPar.n_rows-nbStates,genPar.n_rows-1);   //genPar(arma::span(genPar.n_rows-1),arma::span(),arma::span());
         noOnes = arma::find(as<arma::vec>(genData)!=NAvalue && as<arma::vec>(genData)<1);
         nbOnes = arma::find(as<arma::vec>(genData)==1);
       }
-      
+
       if(genzeroInflation && genoneInflation)
         noZerosOnes = arma::find(as<arma::vec>(genData)>0 && as<arma::vec>(genData)<1);
-      
+
       genPar = genPar.rows(0,genPar.n_rows-oneInd-zeroInd-1); //genPar.tube(0, 0, genPar.n_rows-2, genPar.n_cols-1);
     }
 
     for(int state=0;state<nbStates;state++){
-      
+
       genProb.ones();
-      
+
       if(mvn){
         if(genDist=="mvnorm2" || genDist=="rw_mvnorm2"){
           genArgs1 = cbindmean2(genPar.row(state),genPar.row(nbStates+state));
@@ -286,7 +287,7 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
           //}
         } else if(genDist=="mvnorm3" || genDist=="rw_mvnorm3"){
           genArgs1 = cbindmean3(genPar.row(state),genPar.row(nbStates+state),genPar.row(nbStates*2+state));
-          genArgs2 = cbindsigma3(genPar.row(nbStates*3+state),genPar.row(nbStates*4+state),genPar.row(nbStates*5+state),genPar.row(nbStates*6+state),genPar.row(nbStates*7+state),genPar.row(nbStates*8+state));          
+          genArgs2 = cbindsigma3(genPar.row(nbStates*3+state),genPar.row(nbStates*4+state),genPar.row(nbStates*5+state),genPar.row(nbStates*6+state),genPar.row(nbStates*7+state),genPar.row(nbStates*8+state));
         }
       } else if(genDist=="cat"){
         int catDim = genPar.n_rows / nbStates;
@@ -300,9 +301,9 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
         genArgs1 = genPar.row(state); //genPar(arma::span(0),arma::span(state),arma::span());
         genArgs2 = genPar.row(genPar.n_rows - nbStates + state); //genPar(arma::span(genPar.n_rows-1),arma::span(state),arma::span());
       }
-      
+
       if(genzeroInflation && !genoneInflation) {
-        
+
         zerom = zeromass.row(state);
 
         // compute probability of non-zero observations
@@ -310,41 +311,41 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
 
         // compute probability of zero observations
         genProb.elem(nbZeros) = zerom.elem(nbZeros);
-        
+
       } else if(genoneInflation && !genzeroInflation){
-        
+
         onem = onemass.row(state);
-        
+
         // compute probability of non-one observations
         genProb.elem(noOnes) = (1. - onem.elem(noOnes)) % funMap[genDist](genData[(genData!=NAvalue) & (genData<1.)],genArgs1.elem(noOnes),genArgs2.elem(noOnes));
-        
+
         // compute probability of one observations
         genProb.elem(nbOnes) = onem.elem(nbOnes);
-        
+
       } else if(genzeroInflation && genoneInflation){
-        
+
         zerom = zeromass.row(state);
         onem = onemass.row(state);
-        
+
         // compute probability of non-zero and non-one observations
         genProb.elem(noZerosOnes) = (1. - zerom.elem(noZerosOnes) - onem.elem(noZerosOnes)) % funMap[genDist](genData[(genData>0) & (genData<1)],genArgs1.elem(noZerosOnes),genArgs2.elem(noZerosOnes));
-        
+
         // compute probability of zero observations
         genProb.elem(nbZeros) = zerom.elem(nbZeros);
-        
+
         // compute probability of one observations
         genProb.elem(nbOnes) = onem.elem(nbOnes);
-        
+
       } else {
         genProb.elem(noNAs) = funMap[genDist](genData[genData!=NAvalue],genArgs1.cols(noNAs),genArgs2.cols(noNAs));
       }
-      
+
       allProbs.col(state) = allProbs.col(state) % genProb;
       //for(int i=0; i<nbObs; i++){
       //  Rprintf("allProbs state %d i %d %f \n",state,i,allProbs(i,state));
       //}
     }
-    
+
     // put the NAs back
     for(int l=0; l<L.size(); l++){
       tmpL = L[l];
@@ -357,7 +358,7 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
     }
     genData = combine(L);
   }
-  
+
   // deal with states known a priori
   double prob = 0;
   if(knownStates(0) != -1) {
@@ -367,12 +368,14 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
         prob = allProbs(i,knownStates(i)-1); // save non-zero probability
         allProbs.row(i).zeros(); // set other probabilities to zero
         allProbs(i,knownStates(i)-1) = prob;
+      } else {
+        allProbs.row(i) = lambda*allProbs.row(i)
       }
     }
   }
 
   //======================//
-  // 3. Forward algorithm //
+  // 4. Forward algorithm //
   //======================//
 
   arma::mat Gamma(nbStates,nbStates); // transition probability matrix
@@ -382,20 +385,20 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
   arma::mat alpha(mixtures,nbStates);
   arma::rowvec delt(nbStates);
   arma::mat pie = Par["pi"];
-  
-  double A; 
+
+  double A;
   double lscale = 0.0;
   arma::rowvec maxscale(mixtures);
-  
+
   for(unsigned int i=0;i<allProbs.n_rows;i++) {
-      
+
     for(int mix=0; mix<mixtures; mix++){
-      
+
       if(nbStates>1)
         Gamma = trMat[mix].slice(i);
       else
         Gamma = 1; // no transition if only one state
-      
+
       if(k<aInd.size() && i==(unsigned)(aInd(k)-1)) {
         // if 'i' is the 'k'-th element of 'aInd', switch to the next animal
         delt = delta[mix].row(k);
@@ -405,7 +408,7 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
       } else {
         alpha.row(mix) = (alpha.row(mix) * Gamma) % allProbs.row(i);
       }
-      
+
       mixlscale(mix) += log(sum(alpha.row(mix)));
       alpha.row(mix) = alpha.row(mix)/sum(alpha.row(mix));
     }
