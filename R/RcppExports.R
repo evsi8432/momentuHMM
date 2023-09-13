@@ -261,8 +261,8 @@ getDM_rcpp <- function(X, covs, DM, nr, nc, cov, nbObs) {
 #' @param covs Covariates,
 #' @param data A \code{\link{momentuHMMData}} object of the observations,
 #' @param dataNames Character vector containing the names of the data streams,
-#' @param dist Named list indicating the probability distributions of the data streams. 
-#' @param Par Named list containing the state-dependent parameters of the data streams, matrix of regression coefficients 
+#' @param dist Named list indicating the probability distributions of the data streams.
+#' @param Par Named list containing the state-dependent parameters of the data streams, matrix of regression coefficients
 #' for the transition probabilities ('beta'), and initial distribution ('delta').
 #' @param aInd Vector of indices of the rows at which the data switches to another animal
 #' @param zeroInflation Named list of logicals indicating whether the probability distributions of the data streams are zero-inflated.
@@ -275,10 +275,10 @@ getDM_rcpp <- function(X, covs, DM, nr, nc, cov, nbObs) {
 #' the state is not known.
 #' @param betaRef Indices of reference elements for t.p.m. multinomial logit link.
 #' @param mixtures Number of mixtures for the state transition probabilities
-#' 
+#'
 #' @return Negative log-likelihood
-nLogLike_rcpp <- function(nbStates, covs, data, dataNames, dist, Par, aInd, zeroInflation, oneInflation, stationary, knownStates, betaRef, mixtures) {
-    .Call('_momentuHMM_nLogLike_rcpp', PACKAGE = 'momentuHMM', nbStates, covs, data, dataNames, dist, Par, aInd, zeroInflation, oneInflation, stationary, knownStates, betaRef, mixtures)
+nLogLike_rcpp <- function(nbStates, covs, data, dataNames, dist, Par, aInd, zeroInflation, oneInflation, stationary, knownStates, lambda, betaRef, mixtures) {
+    .Call('_momentuHMM_nLogLike_rcpp', PACKAGE = 'momentuHMM', nbStates, covs, data, dataNames, dist, Par, aInd, zeroInflation, oneInflation, stationary, knownStates, lambda, betaRef, mixtures)
 }
 
 #' Transition probability matrix
