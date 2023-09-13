@@ -369,7 +369,7 @@ double nLogLike_rcpp(int nbStates, arma::mat covs, DataFrame data, CharacterVect
         allProbs.row(i).zeros(); // set other probabilities to zero
         allProbs(i,knownStates(i)-1) = prob;
       } else {
-        allProbs.row(i) = lambda*allProbs.row(i)
+        allProbs.row(i) = lambda*allProbs.row(i);
       }
     }
   }
